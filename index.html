@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Boodschappen Scanner</title>
 
-<!-- QuaggaJS voor EAN-13 barcodes -->
+<!-- QuaggaJS voor barcode scanning -->
 <script src="https://unpkg.com/quagga/dist/quagga.min.js"></script>
 
 <style>
@@ -18,29 +18,34 @@ body {
 
 h1 {
     text-align: center;
+    margin-bottom: 20px;
 }
 
 .container {
-    max-width: 500px;
+    max-width: 480px;
     margin: auto;
 }
 
 .card {
-    background: white;
-    padding: 15px;
+    background: #fff;
     border-radius: 14px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+    padding: 15px;
     margin-bottom: 20px;
 }
 
-.item {
+#lijst .item {
     padding: 12px;
     border-bottom: 1px solid #eee;
     cursor: pointer;
-    transition: 0.3s;
+    transition: all 0.2s ease;
+    border-radius: 10px;
+    margin-bottom: 6px;
+    background: #f9f9f9;
 }
 
-.item:last-child {
+#lijst .item:last-child {
+    margin-bottom: 0;
     border-bottom: none;
 }
 
@@ -49,7 +54,6 @@ h1 {
     color: gray;
     opacity: 0.6;
     transform: scale(0.97);
-    transition: 0.3s;
 }
 
 input, button {
@@ -57,12 +61,12 @@ input, button {
     padding: 12px;
     border-radius: 10px;
     border: none;
-    margin-top: 10px;
     font-size: 16px;
+    margin-top: 10px;
 }
 
 button {
-    background: #007aff;
+    background-color: #007aff;
     color: white;
     font-weight: bold;
 }
@@ -70,13 +74,12 @@ button {
 #scanner {
     width: 100%;
     height: 250px;
-    margin-top: 10px;
     border-radius: 10px;
     overflow: hidden;
+    margin-top: 10px;
 }
 </style>
 </head>
-
 <body>
 <h1>Boodschappen Scanner</h1>
 
@@ -98,11 +101,12 @@ button {
 
 <script type="module">
 // --- DATA ---
-let lijst = JSON.parse(localStorage.getItem("lijst")) || [];
+let lijst = []; // start leeg bij refresh
+let barcodeMap = JSON.parse(localStorage.getItem("barcodeMap")) || {};
 
 // --- HELPERS ---
 function save() {
-    localStorage.setItem("lijst", JSON.stringify(lijst));
+    localStorage.setItem("barcodeMap", JSON.stringify(barcodeMap));
 }
 
 function render() {
@@ -122,13 +126,11 @@ function addItem() {
     if (!input.value) return;
     lijst.push({ naam: input.value.toLowerCase(), gekocht: false });
     input.value = "";
-    save();
     render();
 }
 
 function toggle(index) {
     lijst[index].gekocht = !lijst[index].gekocht;
-    save();
     render();
 }
 
@@ -160,6 +162,18 @@ function startScanner() {
 async function checkProduct(barcode) {
     Quagga.stop();
 
+    // 1. Eerst check eigen barcodeMap
+    if (barcodeMap[barcode]) {
+        lijst.forEach(item => {
+            if (item.naam === barcodeMap[barcode]) {
+                item.gekocht = true;
+            }
+        });
+        render();
+        return;
+    }
+
+    // 2. Check Open Food Facts
     try {
         let response = await fetch("https://world.openfoodfacts.org/api/v0/product/" + barcode + ".json");
         let data = await response.json();
@@ -168,21 +182,23 @@ async function checkProduct(barcode) {
 
         if (data.status === 1) {
             let productName = (data.product.product_name || "").toLowerCase();
-
             lijst.forEach(item => {
                 if (productName.includes(item.naam)) {
                     item.gekocht = true;
                     matched = true;
+                    barcodeMap[barcode] = item.naam;
                 }
             });
         }
 
+        // 3. Fallback prompt
         if (!matched) {
-            let handmatig = prompt("Product niet automatisch herkend. Onder welke categorie valt dit? (bijv. cola, melk)");
+            let handmatig = prompt("Product niet automatisch herkend. Welke categorie is dit? (bijv. cola, melk)");
             if (handmatig) {
                 lijst.forEach(item => {
                     if (item.naam === handmatig.toLowerCase()) {
                         item.gekocht = true;
+                        barcodeMap[barcode] = item.naam;
                     }
                 });
             }
@@ -190,6 +206,7 @@ async function checkProduct(barcode) {
 
         save();
         render();
+
     } catch (e) {
         alert("Internet probleem: " + e);
     }
@@ -197,12 +214,10 @@ async function checkProduct(barcode) {
 
 // --- INIT ---
 render();
-
-// --- GLOBAAL VOOR HTML ONCLICK ---
 window.addItem = addItem;
 window.startScanner = startScanner;
 
-// --- ALTERNATIEF: EVENT LISTENERS (optie) ---
+// Event listeners
 document.getElementById("nieuwItemBtn").addEventListener("click", addItem);
 document.getElementById("startScannerBtn").addEventListener("click", startScanner);
 </script>
