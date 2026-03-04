@@ -156,29 +156,45 @@ function startScanner() {
     });
 }
 
-async function checkProduct(barcode) {
+async function checkProduct(barcode) async function checkProduct(barcode) {
     Quagga.stop();
 
     try {
         let response = await fetch("https://world.openfoodfacts.org/api/v0/product/" + barcode + ".json");
         let data = await response.json();
 
+        let matched = false;
+
         if (data.status === 1) {
-            let productName = data.product.product_name.toLowerCase();
+            let productName = (data.product.product_name || "").toLowerCase();
 
             lijst.forEach(item => {
                 if (productName.includes(item.naam)) {
                     item.gekocht = true;
+                    matched = true;
                 }
             });
-
-            save();
-            render();
-        } else {
-            alert("Product niet gevonden");
         }
+
+        // ALS API product niet kent of geen match
+        if (!matched) {
+            // Fallback: vraag gebruiker
+            let handmatig = prompt("Product niet automatisch herkend. Onder welke categorie valt dit? (bijv. cola, melk)");
+            
+            if (handmatig) {
+                lijst.forEach(item => {
+                    if (item.naam === handmatig.toLowerCase()) {
+                        item.gekocht = true;
+                    }
+                });
+            }
+        }
+
+        save();
+        render();
+
     } catch (e) {
-        alert("Internet nodig voor product herkenning");
+        alert("Internet probleem");
     }
 }
 
