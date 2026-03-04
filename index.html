@@ -4,117 +4,186 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Boodschappen Scanner</title>
+
+<script src="https://unpkg.com/quagga/dist/quagga.min.js"></script>
+
 <style>
-body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px; margin:0;}
-h1 { text-align:center; }
-.container { max-width: 500px; margin: 0 auto; }
-.lijst { background: #fff; border-radius: 10px; padding: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom:20px; }
-.item { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid #eee; cursor:pointer; transition:0.3s; }
-.item:last-child { border-bottom:none; }
-.item.gekocht { text-decoration: line-through; color: gray; transform: scale(0.98); transition:0.3s; }
-input, button { padding: 8px; margin: 5px 0; width:100%; border-radius:5px; border:1px solid #ccc; }
-button { background-color: #4CAF50; color:white; border:none; cursor:pointer; transition:0.3s; }
-button:hover { background-color:#45a049; }
-video { width: 100%; border-radius: 10px; margin-top: 15px; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #f2f2f7;
+    margin: 0;
+    padding: 20px;
+}
+
+h1 {
+    text-align: center;
+}
+
+.container {
+    max-width: 500px;
+    margin: auto;
+}
+
+.card {
+    background: white;
+    padding: 15px;
+    border-radius: 14px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    margin-bottom: 20px;
+}
+
+.item {
+    padding: 12px;
+    border-bottom: 1px solid #eee;
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+.item:last-child {
+    border-bottom: none;
+}
+
+.item.gekocht {
+    text-decoration: line-through;
+    color: gray;
+    opacity: 0.6;
+    transform: scale(0.97);
+}
+
+input, button {
+    width: 100%;
+    padding: 12px;
+    border-radius: 10px;
+    border: none;
+    margin-top: 10px;
+    font-size: 16px;
+}
+
+button {
+    background: #007aff;
+    color: white;
+    font-weight: bold;
+}
+
+#scanner {
+    width: 100%;
+}
 </style>
 </head>
+
 <body>
+
 <h1>Boodschappen Scanner</h1>
+
 <div class="container">
-    <div class="lijst" id="lijstContainer"></div>
 
-    <input type="text" id="nieuwItem" placeholder="Nieuw product toevoegen (bijv. Cola)">
-    <button onclick="toevoegenItem()">Toevoegen</button>
-
-    <button onclick="startScanner()">Start Scanner</button>
-    <video id="video" autoplay></video>
+<div class="card">
+    <div id="lijst"></div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-<script>
-let lijst = [];
-let video = document.getElementById('video');
-let scanning = false;
+<div class="card">
+    <input type="text" id="nieuwItem" placeholder="Bijv. Cola">
+    <button onclick="addItem()">Toevoegen</button>
+</div>
 
-// Lijst renderen
-function renderLijst() {
-    const container = document.getElementById("lijstContainer");
-    container.innerHTML = "";
+<div class="card">
+    <button onclick="startScanner()">Start Scanner</button>
+    <div id="scanner"></div>
+</div>
+
+</div>
+
+<script>
+let lijst = JSON.parse(localStorage.getItem("lijst")) || [];
+
+function save() {
+    localStorage.setItem("lijst", JSON.stringify(lijst));
+}
+
+function render() {
+    const lijstDiv = document.getElementById("lijst");
+    lijstDiv.innerHTML = "";
+
     lijst.forEach((item, index) => {
         const div = document.createElement("div");
         div.className = "item" + (item.gekocht ? " gekocht" : "");
-        div.textContent = item.naam;
-        div.onclick = () => toggleGekocht(index);
-        container.appendChild(div);
+        div.innerText = item.naam;
+        div.onclick = () => toggle(index);
+        lijstDiv.appendChild(div);
     });
 }
 
-// Product afstrepen / terugzetten
-function toggleGekocht(index) {
+function addItem() {
+    const input = document.getElementById("nieuwItem");
+    if (!input.value) return;
+
+    lijst.push({ naam: input.value.toLowerCase(), gekocht: false });
+    input.value = "";
+    save();
+    render();
+}
+
+function toggle(index) {
     lijst[index].gekocht = !lijst[index].gekocht;
-    renderLijst();
+    save();
+    render();
 }
 
-// Nieuw item toevoegen
-function toevoegenItem() {
-    const naam = document.getElementById("nieuwItem").value.trim();
-    if (naam === "") return;
-    lijst.push({ naam: naam, barcodes: [], gekocht: false });
-    document.getElementById("nieuwItem").value = "";
-    renderLijst();
-}
-
-// Scanner starten (iPhone camera)
 function startScanner() {
-    if (scanning) return;
-    scanning = true;
-
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-    .then(stream => {
-        video.srcObject = stream;
-        requestAnimationFrame(scanFrame);
-    }).catch(err => alert("Camera niet beschikbaar: "+err));
-}
-
-// Scan frame
-function scanFrame() {
-    if (!scanning) return;
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(video,0,0,canvas.width,canvas.height);
-    const imageData = ctx.getImageData(0,0,canvas.width,canvas.height);
-
-    const code = jsQR(imageData.data, canvas.width, canvas.height);
-    if (code) {
-        // Barcode gescand
-        checkBarcode(code.data);
-    }
-    requestAnimationFrame(scanFrame);
-}
-
-// Barcode check
-function checkBarcode(barcode) {
-    let gevonden = false;
-    lijst.forEach(item => {
-        // Voor nu: match op naam (categorie) in plaats van echte barcode
-        if (item.naam.toLowerCase().includes("cola") && barcode) {
-            item.gekocht = true;
-            gevonden = true;
-        } else if (item.naam.toLowerCase() === "melk" && barcode) {
-            item.gekocht = true;
-            gevonden = true;
-        } else if (item.naam.toLowerCase() === "bananen" && barcode) {
-            item.gekocht = true;
-            gevonden = true;
+    Quagga.init({
+        inputStream: {
+            type: "LiveStream",
+            target: document.querySelector('#scanner'),
+            constraints: {
+                facingMode: "environment"
+            }
+        },
+        decoder: {
+            readers: ["ean_reader"]
         }
+    }, function(err) {
+        if (err) {
+            console.log(err);
+            alert("Camera fout");
+            return;
+        }
+        Quagga.start();
     });
-    if (!gevonden) alert("Product niet in lijst!");
-    renderLijst();
+
+    Quagga.onDetected(function(data) {
+        let barcode = data.codeResult.code;
+        checkProduct(barcode);
+    });
 }
 
-renderLijst();
+async function checkProduct(barcode) {
+    Quagga.stop();
+
+    try {
+        let response = await fetch("https://world.openfoodfacts.org/api/v0/product/" + barcode + ".json");
+        let data = await response.json();
+
+        if (data.status === 1) {
+            let productName = data.product.product_name.toLowerCase();
+
+            lijst.forEach(item => {
+                if (productName.includes(item.naam)) {
+                    item.gekocht = true;
+                }
+            });
+
+            save();
+            render();
+        } else {
+            alert("Product niet gevonden");
+        }
+    } catch (e) {
+        alert("Internet nodig voor product herkenning");
+    }
+}
+
+render();
 </script>
+
 </body>
 </html>
