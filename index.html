@@ -87,11 +87,11 @@ button {
 
     <div class="card">
         <input type="text" id="nieuwItem" placeholder="Bijv. Cola">
-        <button onclick="addItem()">Toevoegen</button>
+        <button id="nieuwItemBtn">Toevoegen</button>
     </div>
 
     <div class="card">
-        <button onclick="startScanner()">Start Scanner</button>
+        <button id="startScannerBtn">Start Scanner</button>
         <div id="scanner"></div>
     </div>
 </div>
@@ -197,6 +197,14 @@ async function checkProduct(barcode) {
 
 // --- INIT ---
 render();
+
+// --- GLOBAAL VOOR HTML ONCLICK ---
+window.addItem = addItem;
+window.startScanner = startScanner;
+
+// --- ALTERNATIEF: EVENT LISTENERS (optie) ---
+document.getElementById("nieuwItemBtn").addEventListener("click", addItem);
+document.getElementById("startScannerBtn").addEventListener("click", startScanner);
 </script>
 </body>
 </html>
