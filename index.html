@@ -2,127 +2,97 @@
 <html lang="nl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Boodschappen Scanner</title>
 
-<!-- QuaggaJS voor barcode scanning -->
-<script src="https://unpkg.com/quagga/dist/quagga.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode"></script>
 
 <style>
-body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f0f2f5; margin: 0; padding: 20px;}
-h1 { text-align: center; margin-bottom: 20px;}
-.container { max-width: 480px; margin: auto;}
-.card { background: #fff; border-radius: 14px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); padding: 15px; margin-bottom: 20px;}
-#lijst .item { padding: 12px; margin-bottom: 8px; border-radius: 10px; background: #f9f9f9; cursor: pointer; transition: all 0.2s ease; border-left: 5px solid #007aff;}
-#lijst .item.gekocht { text-decoration: line-through; color: gray; opacity: 0.6; transform: scale(0.97); border-left-color: #34c759;}
-input, button { width: 100%; padding: 12px; border-radius: 10px; border: none; font-size: 16px; margin-top: 10px;}
-button { background-color: #007aff; color: white; font-weight: bold;}
-#scanner { width: 100%; height: 250px; border-radius: 10px; overflow: hidden; margin-top: 10px;}
+body{
+    font-family: Arial;
+    text-align:center;
+    background:#f2f2f2;
+}
+
+#reader{
+    width:300px;
+    margin:auto;
+}
+
+button{
+    padding:10px;
+    margin:10px;
+    font-size:16px;
+}
+
+#resultaat{
+    margin-top:20px;
+}
 </style>
+
 </head>
+
 <body>
 
 <h1>Boodschappen Scanner</h1>
 
-<div class="container">
-  <div class="card"><div id="lijst"></div></div>
+<div id="reader"></div>
 
-  <div class="card">
-    <input type="text" id="nieuwItem" placeholder="Bijv. Cola">
-    <button id="nieuwItemBtn">Toevoegen</button>
-  </div>
+<button onclick="haalBarcodes()">Laat gescande barcodes zien</button>
 
-  <div class="card">
-    <button id="startScannerBtn">Start Scanner</button>
-    <div id="scanner"></div>
-  </div>
-</div>
+<div id="resultaat"></div>
 
 <script>
-let lijst = [];            // Lokale lijst van producten
-let barcodeMap = {};       // Barcode → product naam mapping tijdens sessie
-const SERVER_URL = 'fetch("http://192.168.2.38:3000/barcodes",; // <-- verander dit naar je server IP
 
-// Lijst renderen
-function render() {
-    const lijstDiv = document.getElementById("lijst");
-    lijstDiv.innerHTML = "";
-    lijst.forEach((item, index) => {
-        const div = document.createElement("div");
-        div.className = "item" + (item.gekocht ? " gekocht" : "");
-        div.innerText = item.naam;
-        div.onclick = () => toggle(index);
-        lijstDiv.appendChild(div);
-    });
-}
+function onScanSuccess(decodedText) {
 
-// Nieuw item toevoegen
-function addItem() {
-    const input = document.getElementById("nieuwItem");
-    if (!input.value) return;
-    lijst.push({naam: input.value.toLowerCase(), gekocht:false});
-    input.value = "";
-    render();
-}
+    console.log("Barcode:", decodedText);
 
-// Item afstrepen
-function toggle(index) {
-    lijst[index].gekocht = !lijst[index].gekocht;
-    render();
-}
-
-// Barcode scanner starten
-function startScanner() {
-    Quagga.init({
-        inputStream: { type:"LiveStream", target: document.querySelector('#scanner'), constraints: {facingMode:"environment"} },
-        decoder: { readers: ["ean_reader"] }
-    }, function(err){
-        if(err){ alert("Camera fout: "+err); return; }
-        Quagga.start();
+    fetch("http://192.168.2.38:3000/barcode", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            barcode: decodedText
+        })
+    })
+    .then(res => res.text())
+    .then(data => {
+        document.getElementById("resultaat").innerHTML =
+            "<p>Barcode opgeslagen: " + decodedText + "</p>";
+    })
+    .catch(err => {
+        console.error(err);
+        alert("Kan niet verbinden met de server");
     });
 
-    Quagga.onDetected(async function(data){
-        const barcode = data.codeResult.code;
-        await checkProduct(barcode);
-        Quagga.stop();  // stop na detectie
-    });
 }
 
-// Check product & verzenden naar server
-async function checkProduct(barcode){
-    // eerst kijken of barcode al lokaal bekend is
-    if(barcodeMap[barcode]){
-        lijst.forEach(item => { if(item.naam === barcodeMap[barcode]) item.gekocht = true; });
-        render();
-        return;
-    }
+let scanner = new Html5QrcodeScanner(
+    "reader",
+    { fps: 10, qrbox: 250 }
+);
 
-    // prompt voor onbekende barcode
-    let naam = prompt("Product niet herkend. Welke naam hoort erbij?");
-    if(!naam) return;
-    naam = naam.toLowerCase();
+scanner.render(onScanSuccess);
 
-    // lokaal bijwerken
-    lijst.push({naam, gekocht:true});
-    barcodeMap[barcode] = naam;
-    render();
+function haalBarcodes(){
 
-    // naar server sturen
-    try {
-        await fetch(SERVER_URL, {
-            method: 'POST',
-            headers: {'Content-Type':'application/json'},
-            body: JSON.stringify({code: barcode, naam: naam})
-        });
-    } catch(e){
-        alert("Kan niet verbinden met server: " + e);
-    }
+fetch("http://192.168.2.38:3000/barcodes")
+.then(res => res.json())
+.then(data => {
+
+let html = "<h3>Gescande barcodes</h3>";
+
+data.forEach(code => {
+html += "<p>"+code+"</p>";
+});
+
+document.getElementById("resultaat").innerHTML = html;
+
+});
+
 }
 
-// Event listeners
-document.getElementById("nieuwItemBtn").addEventListener("click", addItem);
-document.getElementById("startScannerBtn").addEventListener("click", startScanner);
-render();
 </script>
 
 </body>
